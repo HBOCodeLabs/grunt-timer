@@ -1,15 +1,25 @@
-var duration = require("duration"),
-    colour = require("bash-color");
+var duration = require("duration");
+require("colors");
 
 exports = module.exports = (function () {
     "use strict";
     var timer = {}, grunt, hooker, last, task,
         total = 0,
+        logAll = false,
         deferLogs = false,
         totalOnly = false,
         friendlyTime = false,
+        log,
         deferredMessages = [];
 
+    var defaultLogger = function (task, dur) {
+        if (task) {
+            grunt.log.writeln(("Task '" + task + "' took " + getDisplayTime(dur)).magenta);
+        } else {
+            grunt.log.writeln(("All tasks took " + getDisplayTime(total)).magenta.bold);
+        }
+    }
+    
     var getDisplayTime = function (s) {
         if (!friendlyTime) {
             return s + "ms";
@@ -30,28 +40,46 @@ exports = module.exports = (function () {
             secs + (secs > 1 ? " seconds " : " second ");
     };
 
-    var logCurrent = function () {
+    var logCurrent = function (error) {
         var dur = new duration(last).milliseconds;
-        if (dur > 2) {
-            var logMsg = "Task '" + task + "' took " + getDisplayTime(dur);
-            if(!totalOnly){
+        if (dur > 2 || logAll) {
+            if (!totalOnly){
                 if (deferLogs) {
-                    deferredMessages.push(logMsg);
+                    deferredMessages.push({ task: task, dur: dur, error: error });
                 } else {
-                    grunt.log.writeln(colour.purple(logMsg));
+                    log(task, dur, error);
                 }
             }
             addToTotal(dur);
         }
     };
 
-    var logTotal = function () {
-        grunt.log.writeln(colour.purple("All tasks took " + getDisplayTime(total), true));
+    var logTotal = function (error) {
+        log(undefined, total, error);
     };
 
     var addToTotal = function (ms) {
         total = total + ms;
     };
+
+    var reportTotal = function (error) {
+        logCurrent(error);
+        if (deferLogs) {
+            for (var i = 0; i < deferredMessages.length; i++) {
+                var thisLog = deferredMessages[i];
+                log(thisLog.task, thisLog.dur, thisLog.error);
+            }
+        }
+        logTotal(error);
+        hooker.unhook(grunt.log, "header");
+        hooker.unhook(grunt.fail, "report");
+        hooker.unhook(grunt.fail, "fatal");
+        hooker.unhook(grunt.fail, "warn");
+    };
+    
+    var reportTotalOnFailure = function () {
+        reportTotal(true);
+    }
 
     timer.init = function (_grunt, options) {
         grunt = _grunt;
@@ -59,9 +87,11 @@ exports = module.exports = (function () {
         total = 0;
         options = options || {};
 
-        deferLogs = !!options.deferLogs;
+        logAll       = !!options.logAll;
+        deferLogs    = !!options.deferLogs;
         friendlyTime = !!options.friendlyTime;
         totalOnly    = !!options.totalOnly;
+        log          = options.log || defaultLogger;
 
         hooker.hook(grunt.log, "header", function () {
             if (!task) {
@@ -76,17 +106,16 @@ exports = module.exports = (function () {
             last = new Date();
         });
 
-        process.on("exit", function () {
-            logCurrent();
-            if (deferLogs) {
-                for (var i = 0; i < deferredMessages.length; i++) {
-                    var thisLog = deferredMessages[i];
-                    grunt.log.writeln(colour.purple(thisLog));
-                }
-            }
-            logTotal();
-            hooker.unhook(grunt.log, "header");
-        });
+        // Hooks normal exit with no warnings, or normal exit with warnings when --force thrown
+        hooker.hook(grunt.fail, "report", reportTotal);
+        
+        // Hooks fatal errors, and displays times before the final error message
+        hooker.hook(grunt.fail, "fatal", reportTotalOnFailure);
+        
+        // Hooks warnings when --force is not thrown, and displays times before the warning message.
+        if (!grunt.option('force')) {
+            hooker.hook(grunt.fail, "warn", reportTotalOnFailure);
+        }
     };
 
     return timer;
