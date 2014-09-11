@@ -111,10 +111,12 @@ exports = module.exports = (function () {
         
         // Hooks fatal errors, and displays times before the final error message
         hooker.hook(grunt.fail, "fatal", reportTotalOnFailure);
+        hooker.hook(grunt, "fatal", reportTotalOnFailure);
         
         // Hooks warnings when --force is not thrown, and displays times before the warning message.
         if (!grunt.option('force')) {
             hooker.hook(grunt.fail, "warn", reportTotalOnFailure);
+            hooker.hook(grunt, "warn", reportTotalOnFailure);
         }
     };
 
