@@ -19,7 +19,7 @@ exports = module.exports = (function () {
             grunt.log.writeln(("All tasks took " + getDisplayTime(total)).magenta.bold);
         }
     }
-    
+
     var getDisplayTime = function (s) {
         if (!friendlyTime) {
             return s + "ms";
@@ -63,7 +63,9 @@ exports = module.exports = (function () {
     };
 
     var reportTotal = function (error) {
-        logCurrent(error);
+        if (task) {
+            logCurrent(error);
+        }
         if (deferLogs) {
             for (var i = 0; i < deferredMessages.length; i++) {
                 var thisLog = deferredMessages[i];
@@ -76,7 +78,7 @@ exports = module.exports = (function () {
         hooker.unhook(grunt.fail, "fatal");
         hooker.unhook(grunt.fail, "warn");
     };
-    
+
     var reportTotalOnFailure = function () {
         reportTotal(true);
     }
@@ -108,11 +110,11 @@ exports = module.exports = (function () {
 
         // Hooks normal exit with no warnings, or normal exit with warnings when --force thrown
         hooker.hook(grunt.fail, "report", reportTotal);
-        
+
         // Hooks fatal errors, and displays times before the final error message
         hooker.hook(grunt.fail, "fatal", reportTotalOnFailure);
         hooker.hook(grunt, "fatal", reportTotalOnFailure);
-        
+
         // Hooks warnings when --force is not thrown, and displays times before the warning message.
         if (!grunt.option('force')) {
             hooker.hook(grunt.fail, "warn", reportTotalOnFailure);
